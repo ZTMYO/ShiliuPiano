@@ -1,0 +1,513 @@
+/* ===== 全局 ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100vh; overflow: auto; }
+body {
+  font-family: "Avenir", Helvetica, Arial, sans-serif;
+  background: #fff;
+  color: #555;
+}
+
+/* ===== 加载动画：双星旋转 ===== */
+#loading-screen {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  transition: opacity 0.6s ease, transform 0.6s ease;
+  pointer-events: all;
+}
+#loading-screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#loading-stars {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  animation: star-orbit 2s linear infinite;
+}
+
+.star {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  filter: blur(16px);
+  top: 50%;
+  margin-top: -20px;
+}
+.star-red {
+  background: hsla(0, 75%, 60%, 0.7);
+  left: 0;
+  animation: star-pulse-red 2.4s ease-in-out infinite;
+}
+.star-green {
+  background: hsla(130, 65%, 58%, 0.7);
+  right: 0;
+  animation: star-pulse-green 2.4s ease-in-out infinite;
+}
+
+@keyframes star-orbit {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes star-pulse-red {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50% { transform: scale(1.3); opacity: 1; }
+}
+@keyframes star-pulse-green {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50% { transform: scale(1.3); opacity: 1; }
+}
+
+/* 加载完成：双星放大散开（从当前位置直接散开，不复位） */
+#loading-screen.expand .star-red,
+#loading-screen.expand .star-green {
+  animation: expand-star 0.8s ease-out forwards;
+}
+#loading-screen.expand #loading-stars {
+  /* 保持旋转，让球从轨道当前位置散开 */
+}
+@keyframes expand-star {
+  0% { transform: scale(1); opacity: 0.7; }
+  100% { transform: scale(4); opacity: 0; }
+}
+
+/* ===== 应用主体（初始隐藏，加载后渐显） ===== */
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  height: auto;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+#app.visible {
+  opacity: 1;
+}
+
+/* ===== 顶栏 ===== */
+#header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  gap: 12px;
+}
+#header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+#header h1 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #555;
+  white-space: nowrap;
+}
+.btn {
+  padding: 6px 16px;
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #555;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary { background: rgba(100, 180, 140, 0.25); color: #4a7a4a; border-color: rgba(100, 180, 140, 0.3); }
+.btn-primary:hover:not(:disabled) { background: rgba(100, 180, 140, 0.35); }
+.btn-danger { background: rgba(200, 100, 100, 0.18); color: #8a4a4a; border-color: rgba(200, 100, 100, 0.25); }
+.btn-danger:hover:not(:disabled) { background: rgba(200, 100, 100, 0.28); }
+.btn-outline { background: transparent; color: #888; }
+.btn-outline:hover { background: rgba(0,0,0,0.04); }
+.btn-outline.active { background: rgba(100, 140, 200, 0.15); color: #4a6a8a; border-color: rgba(100, 140, 200, 0.25); }
+
+#status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+#status-bar span {
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.04);
+  color: #888;
+  line-height: 1.5;
+}
+#midi-indicator {
+  padding: 3px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.5;
+}
+#midi-indicator.midi-on { background: #b5d8b5; color: #4a7a4a; }
+#midi-indicator.midi-off { background: #e8b5b5; color: #8a4a4a; }
+
+/* ===== 主区域 ===== */
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px 16px;
+  min-height: 0;
+}
+
+/* ===== 钢琴键盘 (扁平画风) ===== */
+#piano-wrapper {
+  flex: 0 0 auto;
+  min-height: 200px;
+  overflow: hidden;
+  position: relative;
+}
+
+.component-autopiano {
+  width: 100%;
+  position: relative;
+  color: #555;
+}
+
+.piano-scroll-wrap {
+  width: 100%;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #ccc transparent;
+}
+.piano-scroll-wrap::-webkit-scrollbar { height: 4px; }
+.piano-scroll-wrap::-webkit-scrollbar-track { background: transparent; }
+.piano-scroll-wrap::-webkit-scrollbar-thumb { background: #ccc; border-radius: 2px; }
+
+.piano-wrap {
+  width: 90%;
+  margin: 0 auto;
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #d0d0d0;
+}
+
+.piano-band {
+  width: 100%;
+  height: 36px;
+  line-height: 36px;
+  background: #e8e8e8;
+  position: relative;
+}
+.piano-band-img {
+  width: 120px;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.piano-tip {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  color: #888;
+  font-size: 12px;
+}
+
+.piano-key-wrap {
+  width: 100%;
+  background: #eee;
+  overflow: hidden;
+  position: relative;
+}
+.piano-key:hover { cursor: pointer; }
+
+/* 白键 — 扁平 */
+.wkey {
+  display: inline-block;
+  width: 2.775%;
+  height: 100%;
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-top: none;
+  position: relative;
+  vertical-align: top;
+}
+.wkey:active,
+.wkey.local-active {
+  background: #dce8f5;
+}
+.wkey.local-active { background: #c5d9f0 !important; }
+.wkey.remote-active {
+  background: #c5e0c5 !important;
+}
+
+.wkey .keytip {
+  width: 100%;
+  color: #888;
+  text-align: center;
+  font-size: 13px;
+  position: absolute;
+  bottom: 5%;
+  pointer-events: none;
+}
+.wkey .keytip .keyname { margin-bottom: 4px; }
+.wkey .keytip .notename { color: #7a9cc6; font-weight: bold; }
+
+/* 黑键 — 扁平 */
+.bkey {
+  display: inline-block;
+  width: 10%;
+  height: 70%;
+  background: #555;
+  border: 1px solid #444;
+  border-top: none;
+  position: absolute;
+  top: 0;
+  overflow: hidden;
+}
+.bkey:active,
+.bkey.local-active {
+  background: #7a9cc6;
+}
+.bkey.local-active { background: #6b8db8 !important; }
+.bkey.remote-active {
+  background: #6b9c6b !important;
+}
+
+.bkey .keytip {
+  width: 100%;
+  color: #ddd;
+  position: absolute;
+  left: 0;
+  bottom: 5%;
+  font-size: 13px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.bkey .keytip .keyname {
+  width: 100%;
+  text-align: center;
+}
+
+/* 黑键在组内的位置 */
+.bkey:nth-child(1) { left: 9%; }
+.bkey:nth-child(2) { left: 23%; }
+.bkey:nth-child(3) { left: 50%; }
+.bkey:nth-child(4) { left: 65%; }
+.bkey:nth-child(5) { left: 79%; }
+
+/* 黑键组容器 */
+.bkey-wrap {
+  width: 20%;
+  height: 0;
+  position: absolute;
+  top: 0;
+}
+.bkey-wrap1 { left: 0; }
+.bkey-wrap2 { left: 19.5%; }
+.bkey-wrap3 { left: 39%; }
+.bkey-wrap4 { left: 58.3%; }
+.bkey-wrap5 { left: 77.7%; }
+
+@media (max-width: 768px) {
+  html, body { overflow: auto; -webkit-overflow-scrolling: touch; }
+  #app { height: auto; min-height: 100vh; overflow: visible; }
+
+  #header {
+    padding: 6px 8px; gap: 6px;
+    position: sticky; top: 0; z-index: 20;
+    background: #f5f5f5;
+  }
+  #header h1 { font-size: 16px; }
+  #header-left { gap: 6px; flex-wrap: wrap; }
+  .btn { padding: 5px 12px; font-size: 12px; }
+  #status-bar { gap: 4px; }
+  #status-bar span { padding: 2px 6px; font-size: 11px; }
+  #midi-indicator { padding: 2px 6px; font-size: 11px; }
+
+  main {
+    flex: 1;
+    justify-content: center;
+    min-height: 0;
+    padding: 8px 12px 80px;
+  }
+
+  #piano-wrapper {
+    flex: 0 0 auto;
+    min-height: 300px;
+    overflow: visible;
+  }
+
+  .piano-scroll-wrap {
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .piano-wrap { width: 96%; }
+  .piano-band { height: 20px; line-height: 20px; }
+  .piano-band-img { width: 100px; }
+
+  .wkey .keytip { font-size: 12px; }
+  .bkey .keytip { font-size: 12px; }
+}
+
+/* 超窄屏（手机竖屏）琴键提示更小 */
+@media (max-width: 480px) {
+  .wkey .keytip { font-size: 5px; }
+  .wkey .keytip .keyname { margin-bottom: 2px; }
+  .bkey .keytip { font-size: 5px; }
+  .bkey .keytip .keyname { font-size: 5px; }
+}
+
+/* ===== 弹幕 ===== */
+#danmaku-container {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 50vh;
+  z-index: 5;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.danmaku-item {
+  position: absolute;
+  white-space: nowrap;
+  font-size: 16px;
+  font-weight: 500;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  pointer-events: none;
+  animation: danmaku-scroll linear forwards;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.danmaku-item.danmaku-local {
+  border: 1.5px solid rgba(0,0,0,0.15);
+  background: rgba(255,255,255,0.15);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+@keyframes danmaku-scroll {
+  from { transform: translateX(100vw); opacity: 0; }
+  2%   { opacity: 1; }
+  85%  { opacity: 1; }
+  to   { transform: translateX(-100%); opacity: 0; }
+}
+
+/* ===== 弹幕输入区 ===== */
+#danmaku-input-area {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  transform: translateY(calc(100% - 18px));
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+#danmaku-input-area.open {
+  transform: translateY(0);
+}
+
+/* 半圆手柄 */
+#danmaku-handle {
+  width: 40px;
+  height: 20px;
+  border-radius: 13px 13px 0 0;
+  background: #7ab09a;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  pointer-events: auto;
+  position: relative;
+  flex-shrink: 0;
+}
+/* 手柄上的箭头 */
+#danmaku-handle::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  margin-left: -6px;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 7px solid rgba(255,255,255,0.7);
+  transition: none;
+}
+#danmaku-input-area.open #danmaku-handle::after {
+  border-bottom: none;
+  border-top: 7px solid rgba(255,255,255,0.7);
+  top: 8px;
+}
+
+#danmaku-input-wrap {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: rgba(255,255,255,0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 24px;
+  padding: 4px 4px 4px 16px;
+  pointer-events: auto;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  max-width: 400px;
+  width: 100%;
+  transition: none;
+  margin-bottom: 12px;
+}
+
+#danmaku-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: #333;
+  background: transparent;
+  min-width: 0;
+  height: 30px;
+}
+#danmaku-input:focus { outline: none; box-shadow: none; }
+#danmaku-input::placeholder { color: #aaa; }
+
+#danmaku-send {
+  flex-shrink: 0;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  background: #7ab09a;
+  color: #fff;
+  transition: background 0.15s;
+}
+#danmaku-send:hover { background: #6aa08a; }
+#danmaku-send:active { background: #5a907a; }
+
+@media (max-width: 768px) {
+  #danmaku-input-wrap { padding: 3px 3px 3px 12px; margin-bottom: 8px; max-width: 320px; }
+  #danmaku-input { font-size: 13px; height: 28px; }
+  #danmaku-send { padding: 5px 14px; font-size: 12px; }
+}

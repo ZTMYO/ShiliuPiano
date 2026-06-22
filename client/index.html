@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0" />
+  <title>石榴钢琴</title>
+  <link rel="icon" href="/favicon.svg" />
+</head>
+<body>
+  <!-- 加载动画：双星旋转 -->
+  <div id="loading-screen">
+    <div id="loading-stars">
+      <div class="star star-red"></div>
+      <div class="star star-green"></div>
+    </div>
+  </div>
+
+  <div id="visualizer-container"></div>
+  <div id="danmaku-container"></div>
+  <div id="app">
+    <header id="header">
+      <div id="header-left">
+        <h1>石榴钢琴</h1>
+        <button id="btn-play" class="btn btn-primary" disabled>我要弹奏</button>
+        <button id="btn-stop" class="btn btn-danger" disabled style="display:none">停止弹奏</button>
+        <button id="btn-toggle-keys" class="btn btn-outline">键位</button>
+      </div>
+      <div id="status-bar">
+        <span id="status-online">0 在线</span>
+        <span id="midi-indicator" class="midi-off">MIDI</span>
+      </div>
+    </header>
+
+    <main>
+      <div id="piano-wrapper">
+        <div id="piano-container"></div>
+      </div>
+    </main>
+
+    <!-- 弹幕输入区 -->
+    <div id="danmaku-input-area" class="open">
+      <div id="danmaku-handle"></div>
+      <div id="danmaku-input-wrap">
+        <input id="danmaku-input" type="text" placeholder="说点什么…" maxlength="50" />
+        <button id="danmaku-send">发送</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
