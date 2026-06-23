@@ -212,6 +212,7 @@ main {
   line-height: 36px;
   background: #e8e8e8;
   position: relative;
+  user-select: none;
 }
 .piano-band-img {
   width: 120px;
@@ -224,10 +225,49 @@ main {
 .piano-tip {
   position: absolute;
   top: 50%;
-  right: 16px;
+  right: 48px;
   transform: translateY(-50%);
   color: #888;
   font-size: 12px;
+  white-space: nowrap;
+}
+
+.piano-key-toggle {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 2;
+  background: #eaeaea;
+  box-shadow: 0 2px 2px rgba(0,0,0,0.1);
+  transition: all 0.1s;
+}
+.piano-key-toggle svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  fill: #666;
+  transition: fill 0.15s;
+}
+.piano-key-toggle .eye-open { display: none; }
+.piano-key-toggle .eye-closed { display: block; }
+.piano-key-toggle.active .eye-open { display: block; }
+.piano-key-toggle.active .eye-closed { display: none; }
+.piano-key-toggle:active {
+  background: #eeeeee;
+  box-shadow: none;
+  box-shadow: 0 0px 2px rgba(0,0,0,0.1);
+}
+.piano-key-toggle.active {
+  background: #eeeeee;
+  box-shadow: none;
+  box-shadow: 0 0px 2px rgba(0,0,0,0.1);
 }
 
 .piano-key-wrap {
@@ -235,6 +275,9 @@ main {
   background: #eee;
   overflow: hidden;
   position: relative;
+  touch-action: none;  /* 防止触摸时浏览器干扰（滚动/缩放） */
+  -webkit-user-select: none;
+  user-select: none;
 }
 .piano-key:hover { cursor: pointer; }
 
@@ -250,7 +293,6 @@ main {
   position: relative;
   vertical-align: top;
 }
-.wkey:active,
 .wkey.local-active {
   background: #dce8f5;
 }
@@ -283,7 +325,6 @@ main {
   top: 0;
   overflow: hidden;
 }
-.bkey:active,
 .bkey.local-active {
   background: #7a9cc6;
 }
@@ -354,16 +395,20 @@ main {
     flex: 0 0 auto;
     min-height: 300px;
     overflow: visible;
+    touch-action: pan-x pan-y;
   }
 
   .piano-scroll-wrap {
     overflow: auto;
     -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
   }
 
   .piano-wrap { width: 96%; }
   .piano-band { height: 20px; line-height: 20px; }
   .piano-band-img { width: 100px; }
+  .piano-key-toggle { width: 14px; height: 14px; right: 8px; }
+  .piano-key-toggle svg { width: 9px; height: 9px; }
 
   .wkey .keytip { font-size: 12px; }
   .bkey .keytip { font-size: 12px; }

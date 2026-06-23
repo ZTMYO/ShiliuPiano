@@ -6,9 +6,9 @@ import './style.css'
 import './visualizer.css'
 import {
   renderPiano, setLocalLocked, connectMIDI,
-  toggleKeyDisplay, isKeysVisible,
   remoteNoteOn, remoteNoteOff, resetRemoteScheduler,
-  resetAllKeys, callbacks
+  resetAllKeys, callbacks,
+  addRemoteActive, clearRemoteActive
 } from './piano.js'
 import { createVisualizer } from './visualizer.js'
 import { initDanmaku } from './danmaku.js'
@@ -16,7 +16,6 @@ import { initDanmaku } from './danmaku.js'
 // ===== DOM =====
 const btnPlay = document.getElementById('btn-play')
 const btnStop = document.getElementById('btn-stop')
-const btnToggleKeys = document.getElementById('btn-toggle-keys')
 const statusOnline = document.getElementById('status-online')
 const midiIndicator = document.getElementById('midi-indicator')
 
@@ -70,16 +69,20 @@ function connectSocket() {
   // 同步状态
   socket.on('sync-state', ({ playerId, heldNotes, online }) => {
     if (online !== undefined) statusOnline.textContent = `${online} 在线`
+    // 先清空再重新填充远程音符（让可视化立即响应）
+    clearRemoteActive()
+    document.querySelectorAll('.remote-active').forEach(el => el.classList.remove('remote-active'))
+    if (heldNotes && heldNotes.length > 0) {
+      heldNotes.forEach(n => {
+        addRemoteActive(n)
+        const el = document.querySelector(`[data-midi="${n}"]`)
+        if (el) el.classList.add('remote-active')
+      })
+    }
     if (playerId) {
       currentPlayer = playerId
       isPlayer = (playerId === socket.id)
       if (isPlayer) sessionStart = performance.now()
-      if (heldNotes && heldNotes.length > 0) {
-        heldNotes.forEach(n => {
-          const el = document.querySelector(`[data-midi="${n}"]`)
-          if (el) el.classList.add('remote-active')
-        })
-      }
     } else {
       currentPlayer = null
       isPlayer = false
@@ -223,11 +226,6 @@ btnStop.addEventListener('click', () => {
   socket.emit('stop-play')
   isPlayer = false
   updateUI()
-})
-
-btnToggleKeys.addEventListener('click', () => {
-  const visible = toggleKeyDisplay()
-  btnToggleKeys.classList.toggle('active', visible)
 })
 
 midiIndicator.addEventListener('click', () => {

@@ -9,15 +9,25 @@ const pendingBuffers = {}
 let samplerReady = false
 let audioCtx = null
 let masterGain = null
-/** 获取当前按下的琴键信息（可视化用）*/
+
+/** 远程活跃音符（用于可视化）*/
+const remoteActiveNotes = new Set()
+export function addRemoteActive(midi) { remoteActiveNotes.add(midi) }
+export function removeRemoteActive(midi) { remoteActiveNotes.delete(midi) }
+export function clearRemoteActive() { remoteActiveNotes.clear() }
+
+/** 获取当前按下的琴键信息（可视化用）包含本地 + 远程 */
 export function getActiveNotesInfo() {
-  const keys = Object.keys(activeNotes).map(Number).filter(n => !isNaN(n))
+  const localKeys = Object.keys(activeNotes).map(Number).filter(n => !isNaN(n))
+  // 合并本地和远程，去重
+  const all = new Set(localKeys)
+  for (const m of remoteActiveNotes) all.add(m)
   let low = 0, high = 0
-  for (const k of keys) {
+  for (const k of all) {
     if (k < 60) low++    // MIDI 60 = C4 (中央C)，以下低音，以上高音
     else high++
   }
-  return { count: keys.length, lowCount: low, highCount: high }
+  return { count: all.size, lowCount: low, highCount: high }
 }
 
 export const callbacks = {
@@ -193,19 +203,17 @@ export function setLocalLocked(v) { localLocked = v }
 
 export function keyDown(midiNote) {
   if (localLocked) return
-  const now = performance.now()  // 在 resume 前就抓时间戳
-  // 如果音频还没 running，resume 后等完成再播（确保首次点击就有声音）
+  const now = performance.now()
+  // 同步激活按键，防止 resume 异步导致 mouseup 提前执行
+  activateKey(midiNote, 'local-active')
+  callbacks.onNotePlay && callbacks.onNotePlay(midiNote, now)
   if (audioCtx && audioCtx.state === 'suspended') {
     audioCtx.resume().then(() => {
       playNote(midiNote)
-      activateKey(midiNote, 'local-active')
-      callbacks.onNotePlay && callbacks.onNotePlay(midiNote, now)
     }).catch(() => {})
     return
   }
   playNote(midiNote)
-  activateKey(midiNote, 'local-active')
-  callbacks.onNotePlay && callbacks.onNotePlay(midiNote, now)
 }
 export function keyUp(midiNote) {
   if (localLocked) return
@@ -239,6 +247,7 @@ function scheduleNote(midiNote, when) {
 
 /** 接收远程音符 */
 export function remoteNoteOn(midiNote, playerTime) {
+  remoteActiveNotes.add(midiNote)
   tryResumeAudio()
   if (!audioCtx || audioCtx.state !== 'running') return
 
@@ -268,6 +277,7 @@ export function remoteNoteOn(midiNote, playerTime) {
 }
 
 export function remoteNoteOff(midiNote) {
+  remoteActiveNotes.delete(midiNote)
   deactivateKey(midiNote, 'remote-active')
 }
 
@@ -282,6 +292,11 @@ export function resetAllKeys() {
   Object.keys(activeNotes).forEach(midi => stopNote(midi))
   document.querySelectorAll('.local-active').forEach(el => el.classList.remove('local-active'))
   document.querySelectorAll('.remote-active').forEach(el => el.classList.remove('remote-active'))
+  remoteActiveNotes.clear()
+  // 清理鼠标/触摸状态
+  heldKeys.clear()
+  lastMouseMidi = null
+  Object.keys(touchMap).forEach(k => delete touchMap[k])
 }
 
 // ===== 键位显示切换 =====
@@ -325,6 +340,16 @@ export function renderPiano(containerId = 'piano-container') {
   )
   bandImg.alt = ''
   band.appendChild(bandImg)
+
+  // 3D 立体质感圆形键位开关 — 睁眼/闭眼
+  const keyToggle = document.createElement('div')
+  keyToggle.className = 'piano-key-toggle'
+  keyToggle.title = '显示/隐藏键位'
+  // 睁眼 SVG（键位可见）
+  keyToggle.innerHTML = `\
+<svg class="eye-open" viewBox="0 0 1024 1024" width="16" height="16"><path d="M942.2 486.2C847.4 286.5 704.1 186 512 186c-192.2 0-335.4 100.5-430.2 300.3-7.7 16.2-7.7 35.2 0 51.5C176.6 737.5 319.9 838 512 838c192.2 0 335.4-100.5 430.2-300.3 7.7-16.2 7.7-35 0-51.5zM512 766c-161.3 0-279.4-81.8-362.7-254C232.6 339.8 350.7 258 512 258c161.3 0 279.4 81.8 362.7 254C791.5 684.2 673.4 766 512 766z"/><path d="M508 336c-97.2 0-176 78.8-176 176s78.8 176 176 176 176-78.8 176-176-78.8-176-176-176z m0 288c-61.9 0-112-50.1-112-112s50.1-112 112-112 112 50.1 112 112-50.1 112-112 112z"/></svg>\
+<svg class="eye-closed" viewBox="0 0 1024 1024" width="16" height="16"><path d="M942.3 486.4l-0.1-0.1-0.1-0.1c-36.4-76.7-80-138.7-130.7-186L760.7 351c43.7 40.2 81.5 93.7 114.1 160.9C791.5 684.2 673.4 766 512 766c-51.3 0-98.3-8.3-141.2-25.1l-54.7 54.7C374.6 823.8 439.8 838 512 838c192.2 0 335.4-100.5 430.2-300.3 7.7-16.2 7.7-35 0.1-51.3zM878.3 154.2l-42.4-42.4c-3.1-3.1-8.2-3.1-11.3 0L707.8 228.5C649.4 200.2 584.2 186 512 186c-192.2 0-335.4 100.5-430.2 300.3v0.1c-7.7 16.2-7.7 35.2 0 51.5 36.4 76.7 80 138.7 130.7 186.1L111.8 824.5c-3.1 3.1-3.1 8.2 0 11.3l42.4 42.4c3.1 3.1 8.2 3.1 11.3 0l712.8-712.8c3.1-3 3.1-8.1 0-11.2zM398.9 537.4c-1.9-8.2-2.9-16.7-2.9-25.4 0-61.9 50.1-112 112-112 8.7 0 17.3 1 25.4 2.9L398.9 537.4z m184.5-184.5C560.5 342.1 535 336 508 336c-97.2 0-176 78.8-176 176 0 27 6.1 52.5 16.9 75.4L263.3 673c-43.7-40.2-81.5-93.7-114.1-160.9C232.6 339.8 350.7 258 512 258c51.3 0 98.3 8.3 141.2 25.1l-69.8 69.8z"/><path d="M508 624c-6.4 0-12.7-0.5-18.8-1.6l-51.1 51.1c21.4 9.3 45.1 14.4 69.9 14.4 97.2 0 176-78.8 176-176 0-24.8-5.1-48.5-14.4-69.9l-51.1 51.1c1 6.1 1.6 12.4 1.6 18.8C620 573.9 569.9 624 508 624z"/></svg>`
+  band.appendChild(keyToggle)
 
   const tip = document.createElement('div')
   tip.className = 'piano-tip'
@@ -395,13 +420,23 @@ export function renderPiano(containerId = 'piano-container') {
   bindMouseEvents(keyWrap)
   bindKeyboardEvents()
 
+  // 键位开关事件（使用上面创建的 keyToggle）
+  keyToggle.addEventListener('click', () => {
+    const visible = toggleKeyDisplay()
+    keyToggle.classList.toggle('active', visible)
+  })
+
   return autoPiano
 }
 
-// ===== 鼠标事件 =====
+// ===== 鼠标事件（支持滑键） =====
 const heldKeys = new Set()
+let lastMouseMidi = null
+const touchMap = {}
 
 function bindMouseEvents(keyWrap) {
+  // ---- 鼠标滑键 ----
+
   keyWrap.addEventListener('mousedown', (e) => {
     const key = e.target.closest('[data-midi]')
     if (!key) return
@@ -410,35 +445,102 @@ function bindMouseEvents(keyWrap) {
     resumeAudioContext()
     keyDown(midi)
     heldKeys.add(midi)
-    key._held = true
+    lastMouseMidi = midi
   })
-  document.addEventListener('mouseup', () => {
-    heldKeys.forEach(midi => { keyUp(midi) })
-    heldKeys.clear()
-  })
-  keyWrap.addEventListener('mouseleave', () => {
-    heldKeys.forEach(midi => { keyUp(midi) })
-    heldKeys.clear()
-  })
-  keyWrap.addEventListener('touchstart', (e) => {
-    const touch = e.changedTouches[0]
-    const key = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('[data-midi]')
+
+  keyWrap.addEventListener('mousemove', (e) => {
+    if (lastMouseMidi === null) return  // 没有按下
+    const key = e.target.closest('[data-midi]')
     if (!key) return
-    e.preventDefault()
     const midi = parseInt(key.dataset.midi)
-    resumeAudioContext()
-    keyDown(midi)
-    heldKeys.add(midi)
-    key._held = true
-  }, { passive: false })
-  keyWrap.addEventListener('touchend', (e) => {
-    const touch = e.changedTouches[0]
-    const key = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('[data-midi]')
-    if (key && key._held) {
-      keyUp(parseInt(key.dataset.midi))
-      heldKeys.delete(parseInt(key.dataset.midi))
-      key._held = false
+    if (midi !== lastMouseMidi) {
+      // 滑到新键：释放旧键，按下新键
+      keyUp(lastMouseMidi)
+      heldKeys.delete(lastMouseMidi)
+      keyDown(midi)
+      heldKeys.add(midi)
+      lastMouseMidi = midi
     }
+  })
+
+  document.addEventListener('mouseup', () => {
+    if (lastMouseMidi !== null) {
+      keyUp(lastMouseMidi)
+      heldKeys.delete(lastMouseMidi)
+      lastMouseMidi = null
+    }
+  })
+
+  // 鼠标离开键盘区域也释放
+  keyWrap.addEventListener('mouseleave', () => {
+    if (lastMouseMidi !== null) {
+      keyUp(lastMouseMidi)
+      heldKeys.delete(lastMouseMidi)
+      lastMouseMidi = null
+    }
+  })
+
+  // ---- 触摸滑键（支持多点触控） ----
+  keyWrap.addEventListener('touchstart', (e) => {
+    e.preventDefault()
+    for (const touch of e.changedTouches) {
+      const el = document.elementFromPoint(touch.clientX, touch.clientY)
+      const key = el?.closest('[data-midi]')
+      if (!key) continue
+      const midi = parseInt(key.dataset.midi)
+      resumeAudioContext()
+      keyDown(midi)
+      heldKeys.add(midi)
+      touchMap[touch.identifier] = midi
+    }
+  }, { passive: false })
+
+  keyWrap.addEventListener('touchmove', (e) => {
+    e.preventDefault()
+    for (const touch of e.changedTouches) {
+      const oldMidi = touchMap[touch.identifier]
+      const el = document.elementFromPoint(touch.clientX, touch.clientY)
+      const key = el?.closest('[data-midi]')
+      if (!key) {
+        // 滑出键盘区域 → 释放
+        if (oldMidi !== undefined) {
+          keyUp(oldMidi)
+          heldKeys.delete(oldMidi)
+          delete touchMap[touch.identifier]
+        }
+        continue
+      }
+      const midi = parseInt(key.dataset.midi)
+      if (midi !== oldMidi) {
+        if (oldMidi !== undefined) {
+          keyUp(oldMidi)
+          heldKeys.delete(oldMidi)
+        }
+        keyDown(midi)
+        heldKeys.add(midi)
+        touchMap[touch.identifier] = midi
+      }
+    }
+  }, { passive: false })
+
+  keyWrap.addEventListener('touchend', (e) => {
+    e.preventDefault()
+    for (const touch of e.changedTouches) {
+      const midi = touchMap[touch.identifier]
+      if (midi !== undefined) {
+        keyUp(midi)
+        heldKeys.delete(midi)
+        delete touchMap[touch.identifier]
+      }
+    }
+  }, { passive: false })
+
+  keyWrap.addEventListener('touchcancel', () => {
+    for (const midi of Object.values(touchMap)) {
+      keyUp(midi)
+      heldKeys.delete(midi)
+    }
+    Object.keys(touchMap).forEach(k => delete touchMap[k])
   })
 }
 
@@ -463,12 +565,18 @@ function bindKeyboardEvents() {
   document.addEventListener('keyup', (e) => {
     const keyCode = e.keyCode
     if (keyCode === 16) { enableBlackKey = false; return }
-    let searchCode = enableBlackKey ? 'b' + keyCode : '' + keyCode
-    const note = Notes.find(n => n.keyCode === searchCode)
-    if (!note) return
-    const midi = note.midi
-    keyUp(midi)
-    heldKeys.delete(midi)
+    // 查找所有匹配此键码的音符（白键和黑键两种编码都要查）
+    // 避免 Shift 先松开后搜索编码不对，导致黑键残留高亮
+    const candidates = Notes.filter(n =>
+      n.keyCode === '' + keyCode || n.keyCode === 'b' + keyCode
+    )
+    for (const note of candidates) {
+      const midi = note.midi
+      if (heldKeys.has(midi)) {
+        keyUp(midi)
+        heldKeys.delete(midi)
+      }
+    }
   })
 }
 
