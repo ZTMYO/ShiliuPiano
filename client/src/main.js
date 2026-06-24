@@ -28,6 +28,29 @@ let audioReady = false  // 音频采样是否就绪（仅用于音频播放）
 
 // ===== Socket =====
 let danmaku = null  // 弹幕控制器（onReady 后初始化）
+let badWords = []   // 违规词列表
+
+// 加载违规词库并创建过滤函数
+async function loadBadWords() {
+  try {
+    const resp = await fetch('/assets/lib/违规词库.txt')
+    const text = await resp.text()
+    badWords = text.split('\n').map(w => w.trim()).filter(w => w.length > 0)
+    // 按长度降序排序，优先匹配长词
+    badWords.sort((a, b) => b.length - a.length)
+  } catch (_) {}
+}
+loadBadWords()
+
+function filterBadWords(text) {
+  let result = text
+  for (const word of badWords) {
+    // 全局替换为等长的星号
+    const stars = '*'.repeat(word.length)
+    result = result.split(word).join(stars)
+  }
+  return result
+}
 
 function connectSocket() {
   socket = io(window.location.origin, { transports: ['websocket', 'polling'] })
@@ -105,7 +128,7 @@ function connectSocket() {
   socket.on('chat-message', (data) => {
     if (!danmaku) return
     if (data.from && data.from === mySocketId) return  // 自己发的跳过
-    danmaku.add(data.text)
+    danmaku.add(filterBadWords(data.text))
   })
 }
 
@@ -135,9 +158,10 @@ function setupDanmakuUI() {
   function send() {
     const text = input.value.trim()
     if (!text) return
+    const filtered = filterBadWords(text)
     if (socket?.connected) {
-      socket.emit('chat-message', text)
-      danmaku.add(text, true)  // 本地弹幕带标记
+      socket.emit('chat-message', filtered)
+      danmaku.add(filtered, true)  // 本地弹幕也显示过滤后的结果
     }
     input.value = ''
     input.focus()
@@ -230,6 +254,21 @@ btnStop.addEventListener('click', () => {
 
 midiIndicator.addEventListener('click', () => {
   connectMIDI()
+})
+
+// ===== 关于模态框 =====
+const btnAbout = document.getElementById('btn-about')
+const aboutOverlay = document.getElementById('about-overlay')
+const modalClose = document.getElementById('modal-close')
+
+btnAbout.addEventListener('click', () => {
+  aboutOverlay.classList.remove('hidden')
+})
+modalClose.addEventListener('click', () => {
+  aboutOverlay.classList.add('hidden')
+})
+aboutOverlay.addEventListener('click', (e) => {
+  if (e.target === aboutOverlay) aboutOverlay.classList.add('hidden')
 })
 
 // ===== 启动 =====

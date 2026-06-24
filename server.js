@@ -2,12 +2,36 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' }
 });
+
+// ===== 最大连接数 =====
+const MAX_CONNECTIONS = 16;
+
+// ===== 加载违规词库 =====
+let badWords = []
+try {
+  const raw = fs.readFileSync(path.join(__dirname, 'client', 'public', 'assets', 'lib', '违规词库.txt'), 'utf-8')
+  badWords = raw.split('\n').map(w => w.trim()).filter(w => w.length > 0)
+  badWords.sort((a, b) => b.length - a.length)
+  console.log(`违规词库加载完成，共 ${badWords.length} 条`)
+} catch (e) {
+  console.warn('违规词库加载失败:', e.message)
+}
+
+function filterBadWords(text) {
+  let result = text
+  for (const word of badWords) {
+    const stars = '*'.repeat(word.length)
+    result = result.split(word).join(stars)
+  }
+  return result
+}
 
 // ===== 服务端状态 =====
 let currentPlayerId = null;    // 当前弹奏者 socket.id
@@ -21,6 +45,14 @@ app.use(express.static(path.join(__dirname, 'client', 'dist')));
 // ===== Socket.io 事件 =====
 io.on('connection', (socket) => {
   console.log(`用户连接: ${socket.id}`);
+
+  // 检查最大连接数
+  if (io.engine.clientsCount > MAX_CONNECTIONS) {
+    socket.emit('error-message', '服务器已满（上限 16 人），请稍后再试');
+    socket.disconnect(true);
+    return;
+  }
+
   onlineUsers.set(socket.id, { nickname: `用户${socket.id.slice(0, 4)}` });
 
   // 广播在线状态
@@ -94,9 +126,10 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('remote-note', data);
   });
 
-  // 弹幕消息 — 广播给除发送者外的所有人
+  // 弹幕消息 — 过滤违规词后广播
   socket.on('chat-message', (text) => {
-    socket.broadcast.emit('chat-message', { text, from: socket.id });
+    const filtered = filterBadWords(text)
+    socket.broadcast.emit('chat-message', { text: filtered, from: socket.id })
   });
 
   // 断开连接
